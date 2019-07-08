@@ -1,1 +1,1 @@
-# rdf_converter_nbrp
+# RDF converter for NBRP resources
