@@ -1,12 +1,13 @@
 #!/usr/bin/env ruby
 require 'optparse'
-
+require 'date'
 
 module DGRC
 
   def prefixes
     ["nbrp: <http://nbrp.jp/>",
      "nbrp_dggr: <http://nbrp.jp/dggr/>",
+     "nbrp_rnai: <http://nbrp.jp/rnai/>",
      "dggr: <https://kyotofly.kit.jp/cgi-bin/stocks/search_res_det.cgi?DB_NUM=1&DG_NUM=>",
      "faldo: <http://biohackathon.org/resource/faldo#>",
      "rdfs: <http://www.w3.org/2000/01/rdf-schema#>",
@@ -32,6 +33,11 @@ module DGRC
 
   class DGGR
 
+    MONTH = ['January', 'Feburary', 'March', 'April', 'May', 'June',
+             'July', 'August', 'September', 'October', 'November', 'December',
+             'Jan', 'Fe', 'Mar', 'Apr', 'May', 'Jun',
+             'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
     def initialize(file_name)
       @strains = {}
       @keys = []
@@ -46,7 +52,34 @@ module DGRC
         ary = line.scrub.chomp.split("\t", -1)
         strain_number = ary[0]
         ary.map!{|e| e == "" ? e = nil : e}
-        @strains[strain_number] = Hash[@keys.zip(ary)]
+        h = Hash[@keys.zip(ary)]
+        d = parse_received_date(h[:received_date]) if h[:received_date]
+#        @strains[strain_number] = Hash[@keys.zip(ary)]
+      end
+    end
+
+    def parse_received_date(received_date)
+      begin
+        Date.parse(received_date)
+      rescue
+#        STDERR.print "#{received_data}\n"
+        parse_date(received_date)
+      end
+    end
+
+    def parse_date(date)
+      case date
+      when /(\d+)\/(\d+)\/(\d\d)/
+        month = $1.to_i; day = $2.to_i; year = $3.to_i;
+#        return Date.new("20%02d".%(year).to_i, month, day) if year < 20
+#        return Date.new("19%02d".%(year).to_i, month, day) if year >= 20
+      when /(\d\d) (#{Regexp.new(MONTH.join('|'))}) (\d\d\d\d)/
+        p date
+        day = $1.to_i; month = $2; year = $3.to_i;
+        return Date.new("20%02d".%(year).to_i, (MONTH.index?(month) + 1).modulo(12), day)
+      when /(\d\d\d\d)/
+#        return $1.to_i
+      else
       end
     end
 
@@ -87,7 +120,7 @@ module DGRC
         print "  nbrp:lethal_phase \"#{h[:lethal_phase]}\";\n" if h[:lethal_phase]
         print "  nbrp:adult_phenotype \"#{h[:adult_phenotype]}\";\n" if h[:adult_phenotype]
 #        print "  nbrp: \"#{h[:]}\";\n" unless h[:] == nil
-        print "  a nbrp:BioResource .\n"
+        print "  a nbrp:BiologicalResource .\n"
         print "\n"
       end
     end
@@ -126,8 +159,15 @@ module DGRC
       @strains.each do |strain_number, h|
         print "nbrp_rnai:#{strain_number}\n"
         print "  dcterms:identifier \"#{strain_number}\";\n"
-        print "  rdfs:comment \"#{h[:comment]}\";\n"
-        print "  a nbrp:BioResource .\n"
+        if h[:synonyms]
+          print "  skos:altLabel "
+          synonyms = h[:synonyms].chomp.split(",").select!{|e| !e.match(/#{h[:cg_no]}/)}
+#          synonyms = h[:synonyms].chomp.split(",").map{|e| e.match(/#{h[:cg_no]}/) ? nil : e.strip}
+#          print "#{synonyms.map{|e| "\"#{e}\"" if e}.join(", ")} ;\n"
+          print "#{synonyms.map{|e| "\"#{e.strip}\""}.join(", ")};\n"
+        end
+        print "  rdfs:comment \"#{h[:comment]}\";\n" if h[:comment]
+        print "  a nbrp:BiologicalResource .\n"
         print "\n"
       end
     end
@@ -142,7 +182,7 @@ if $0 == __FILE__
   if params["dggr"]
     dggr = DGRC::DGGR.new(params["i"])
     DGRC.prefixes
-    dggr.rdf
+#    dggr.rdf
   end
   if params["rnai"]
     rnai = DGRC::NIGRNAi.new(params["i"])
